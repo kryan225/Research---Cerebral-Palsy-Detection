@@ -19,7 +19,7 @@ from os.path import isfile, join
 
 
 
-def capture(vidFile):
+def capture(vidFile, outFolder, prefix):
     '''
     Function that takes in a video file path and outputs the dense optical flow images for every frame. 
     The new images are exported into a new directory. Set vidFile to 0 for screen capture
@@ -33,11 +33,12 @@ def capture(vidFile):
     hsv[...,1] = 255
     x = 0;
     
-    newDir = vidFile[:-4] + '_DIR/'
-    os.mkdir(newDir)
+    os.mkdir(outFolder)
     while(1):
-        ret, frame2 = cap.read()
         
+        ret, frame2 = cap.read()
+        if not ret:
+            break
         #converts the image to a different color scheme - in this case changes to grey 
         next = cv.cvtColor(frame2,cv.COLOR_BGR2GRAY)
         
@@ -60,7 +61,7 @@ def capture(vidFile):
         #elif k == ord('s'):
         
         #name1 = newDir + 'opticalfb' + str(x) +'.png'
-        name2 = newDir + 'opticalhsv' + str(x) + '.png'
+        name2 = outFolder + '/' + prefix + str(x) + '.png'
         #cv.imwrite(name1,frame2) - this is the original image
         cv.imwrite(name2,bgr) # write the dense optical flow image to the new directory
         x = x + 1
@@ -69,15 +70,41 @@ def capture(vidFile):
     cv.destroyAllWindows()
     
     
-def batchCapture(path):
+def parseLine(line):
     '''
-    This function takes in a directory path, that should contain multiple .avi files and will map the above
-    function over every file. This will result in numerous new directories, each containing the dense optical flow
-    images for a video in the specified path
+    This function parses a line that has been read from a txt file and returns the strings between commas in a list
     '''
-    files = [f for f in listdir(path) if isfile(join(path, f))]
-    for video in files:
-        if(video[-3:] == 'avi'):
-            capture(video)
-        else:
-            print('ERROR - Video file: ' + video + ' not of type .avi. Could not calculate dense optical flow\n')
+    ret = []
+    lastC = -1
+    
+    #iterate through each character in the line
+    for i in enumerate(line):     
+        
+        #if we've found a comma record and add the previous substring to the return list
+        if(i[1] == ','):
+            ret.append(line[lastC+1:i[0]])
+            lastC = i[0]
+            
+    #we need to check if there is a \n at the end of the line
+    if(line[-1:] == '\n'):
+        end = -1
+    else:
+        end = len(line)
+    ret.append(line[lastC+1:end])#avoid the \n character for a new line if it's there
+    return ret
+    
+    
+def batchCapture(textFile):
+    '''
+    This function takes in a txt file, which contains lines according to the format:
+        path to a video file, desired output folder name, image prefix. 
+    It then parses the lines and calculates,saves the dense optical flow images for each video in 
+    the txt file. 
+    '''
+    f = open(textFile)
+    lines = f.readlines()
+    for line in enumerate(lines):
+        parsed = parseLine(line[1])
+        capture(parsed[0], parsed[1], parsed[2])
+            
+            
