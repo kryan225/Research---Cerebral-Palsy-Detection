@@ -11,14 +11,148 @@ images of the dense optical flow calculations for every frame
 @author: kryan
 """
 
+import pandas as pd
 import cv2 as cv
 import numpy as np
 import os
+import pymysql
 from os import listdir
 from os.path import isfile, join
 
 
+        
 
+def connect():
+    '''
+    Forms a connection to the amazon RDS server using my login credentials
+    '''
+    host = 'nicu-2019-03-05.c2lckhwrw1as.us-east-1.rds.amazonaws.com'
+    port = 3306
+    dbname = 'nicu'
+    user = 'ryan'
+    password = 'nicu_ryan'
+    conn = pymysql.connect(host, user=user, port=port, passwd=password, db=dbname)
+    return conn
+
+def frameCapture(f1, f2, outFolder, name):
+    '''
+    Function that takes in two frames and outputs the dense optical flow image for them
+    '''
+    frame1 = cv.imread(f1)
+    frame2 = cv.imread(f2)
+    prvs = cv.cvtColor(frame1,cv.COLOR_BGR2GRAY)
+    hsv = np.zeros_like(frame1)
+    hsv[...,1] = 255
+    
+    if not os.path.exists(outFolder):
+        os.mkdir(outFolder)
+        
+    next = cv.cvtColor(frame2,cv.COLOR_BGR2GRAY)
+    
+    flow = cv.calcOpticalFlowFarneback(prvs,next, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    
+    mag, ang = cv.cartToPolar(flow[...,0], flow[...,1])
+    hsv[...,0] = ang*180/np.pi/2
+    hsv[...,2] = cv.normalize(mag,None,0,255,cv.NORM_MINMAX)
+    bgr = cv.cvtColor(hsv,cv.COLOR_HSV2BGR)
+    cv.imshow('frame2',bgr)
+
+    name2 = outFolder + '/' + name + '.png'
+    cv.imwrite(name2,bgr)
+    cv.destroyAllWindows()
+    
+    
+
+def convertToBinaryData(filename):
+    #Convert digital data to binary format
+    with open(filename, 'rb') as file:
+        binaryData = file.read()
+    return binaryData
+
+def read_file(filename):
+    with open(filename, 'rb') as f:
+        photo = f.read()
+    return photo
+    
+    
+    
+    '''TO DO:
+    
+    CHECK TO MAKE SURE THAT DATA IS IN FOR CURRENT RAW_ID
+    IF DATA ALREADY EXISTS FOR RAW_ID THEN DO NOTHING
+    
+    If given a video, parse into frames and then post to video_raw
+    then do optical flow on it and update to video_generated
+    '''
+def sql_send(directory, con=connect()):
+    '''
+    Sends Optical Flow images from a directory to the amazon RDS
+    
+    CANT INSERT BLOBS - MUST UPDATE THEM INTO DATABASE
+    '''
+    curs = con.cursor()    
+    
+    for f in os.listdir(directory):
+        currentID = int(f[:-4])
+        print(currentID)
+        fname = directory + '/' + f
+        photo = read_file(fname)
+        #sql command:
+        insert_query = """INSERT INTO Video_Generated (raw_id) VALUES (%s)"""
+        try:
+            #insert the raw_id
+            curs.execute(insert_query, (currentID))
+            con.commit()
+            print("success inserting raw_id")
+        except:
+            con.rollback()
+            print("failure inserting raw_id")
+            
+            
+        update_query = """UPDATE Video_Generated SET RGB_OpticalFlow = %s WHERE (raw_id = %s)"""
+        try:
+           # Execute the SQL command
+           #curs.execute(sql % (x, None))
+           curs.execute(update_query, (photo, currentID))
+           # Commit your changes in the database
+           con.commit()
+           print("success updating photo")
+        except:
+           # Rollback in case there is any error
+           con.rollback() 
+           print("failure updating photo")
+
+            
+    
+'''
+
+For the sql calls, write each RGB_frame to local using file.open('name', 'wb') and file.write(df[rgb_frame])
+Then call frameCapture on the 2 frames
+Then delete the file with os.remove('name')
+
+'''
+def sql_write(outFolder, name):
+    conn = connect()
+    df = pd.read_sql('Select id, timestamp, RGB_frame from Video_Raw order by timestamp', con=conn)
+    for index, row in df.iterrows():
+        idn = row['id']
+        n = str(idn) + '.png'
+        f = open(n, 'wb')
+        f.write(row['RGB_frame'])
+        f.close()
+        
+    for x in range(len(df['id']) - 1):
+        current = str(df['id'][x]) + '.png'
+        next = str(df['id'][x + 1]) + '.png'
+        nm = str(df['id'][x + 1])# + '-' + str(df['id'][x + 1]) + '_OF'
+        frameCapture(current, next, outFolder, nm)
+        if os.path.exists(current):
+            os.remove(current)
+    if os.path.exists(next):
+        os.remove(next)
+    
+    conn.close()
+    
 def capture(vidFile, outFolder, prefix):
     '''
     Function that takes in a video file path and outputs the dense optical flow images for every frame. 
@@ -60,9 +194,9 @@ def capture(vidFile, outFolder, prefix):
             break
         #elif k == ord('s'):
         
-        #name1 = newDir + 'opticalfb' + str(x) +'.png'
+        #name1 = outFolder + '/' + 'opticalfb_' + str(x) +'.png'
         name2 = outFolder + '/' + prefix + str(x) + '.png'
-        #cv.imwrite(name1,frame2) - this is the original image
+        #cv.imwrite(name1,frame2) #- this is the original image
         cv.imwrite(name2,bgr) # write the dense optical flow image to the new directory
         x = x + 1
         prvs = next
