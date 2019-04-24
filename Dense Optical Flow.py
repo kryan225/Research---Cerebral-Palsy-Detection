@@ -63,12 +63,7 @@ def frameCapture(f1, f2, outFolder, name):
     
     
 
-def convertToBinaryData(filename):
-    #Convert digital data to binary format
-    with open(filename, 'rb') as file:
-        binaryData = file.read()
-    return binaryData
-
+#reads a photo by taking in the filename
 def read_file(filename):
     with open(filename, 'rb') as f:
         photo = f.read()
@@ -112,7 +107,6 @@ def sql_send(directory, con=connect()):
         update_query = """UPDATE Video_Generated SET RGB_OpticalFlow = %s WHERE (raw_id = %s)"""
         try:
            # Execute the SQL command
-           #curs.execute(sql % (x, None))
            curs.execute(update_query, (photo, currentID))
            # Commit your changes in the database
            con.commit()
@@ -132,19 +126,29 @@ Then delete the file with os.remove('name')
 
 '''
 def sql_write(outFolder, name):
+    '''
+    Connects to Amazon RDS and creates dense optical flow images from Video_Raw
+    Saves to local directory
+    '''
     conn = connect()
     df = pd.read_sql('Select id, timestamp, RGB_frame from Video_Raw order by timestamp', con=conn)
+    rawIds = pd.read_sql('Select raw_id from Video_Generated', con=conn)
+    rawIds = rawIds['raw_id'].unique()
+    written = []
+    next = 'dumbyVar'
     for index, row in df.iterrows():
         idn = row['id']
-        n = str(idn) + '.png'
-        f = open(n, 'wb')
-        f.write(row['RGB_frame'])
-        f.close()
+        if(idn not in rawIds):
+            written.append(idn)
+            n = str(idn) + '.png'
+            f = open(n, 'wb')
+            f.write(row['RGB_frame'])
+            f.close()
         
-    for x in range(len(df['id']) - 1):
-        current = str(df['id'][x]) + '.png'
-        next = str(df['id'][x + 1]) + '.png'
-        nm = str(df['id'][x + 1])# + '-' + str(df['id'][x + 1]) + '_OF'
+    for x in range(len(written) - 1):
+        current = str(written[x]) + '.png'
+        next = str(written[x + 1]) + '.png'
+        nm = str(written[x + 1])# + '-' + str(df['id'][x + 1]) + '_OF'
         frameCapture(current, next, outFolder, nm)
         if os.path.exists(current):
             os.remove(current)
@@ -152,6 +156,7 @@ def sql_write(outFolder, name):
         os.remove(next)
     
     conn.close()
+    return written
     
 def capture(vidFile, outFolder, prefix):
     '''
