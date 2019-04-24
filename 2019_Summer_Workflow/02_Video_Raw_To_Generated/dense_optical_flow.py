@@ -9,6 +9,8 @@ flow can be maped over a folder containing multiple .avi files, resulting in mul
 images of the dense optical flow calculations for every frame
 
 @author: kryan
+
+pip install opencv-python-headless
 """
 
 import pandas as pd
@@ -131,7 +133,8 @@ def sql_write(outFolder, name):
     Saves to local directory
     '''
     conn = connect()
-    df = pd.read_sql('Select id, timestamp, RGB_frame from Video_Raw order by timestamp', con=conn)
+    #djp3 editted below
+    df = pd.read_sql('Select id, timestamp, RGB_frame from Video_Raw order by timestamp limit 10', con=conn)
     rawIds = pd.read_sql('Select raw_id from Video_Generated', con=conn)
     rawIds = rawIds['raw_id'].unique()
     written = []
@@ -247,3 +250,8 @@ def batchCapture(textFile):
         capture(parsed[0], parsed[1], parsed[2])
             
             
+def main():
+    sql_write("test","dummy")
+
+
+main()
