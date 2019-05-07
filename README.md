@@ -19,6 +19,7 @@ Install Anaconda [For Windows](https://docs.anaconda.com/anaconda/install/window
 [Creating Virtual Environments with Anaconda](https://uoa-eresearch.github.io/eresearch-cookbook/recipe/2014/11/20/conda/)
 
 *Note: You can also create a new environment using the GUI provided in the Anaconda Navigator*
+*Note: You will also need to install packages such as OpenCV to compile the Dense_Optical_Flow program*
 
 ### Final Steps
 
