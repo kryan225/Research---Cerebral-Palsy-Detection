@@ -21,6 +21,16 @@ Install Anaconda [For Windows](https://docs.anaconda.com/anaconda/install/window
 *Note: You can also create a new environment using the GUI provided in the Anaconda Navigator*
 *Note: You will also need to install packages such as OpenCV to compile the Dense_Optical_Flow program*
 
+### Install required packages:
+1. Open an anaconda prompt
+
+2. Navigate to your environment that you are using, if it is seperate from the base environment
+
+3. Type 'conda install opencv'
+
+4. Type 'conda install pymysql'
+
+
 ### Final Steps
 
 Install spyder using the Anaconda Navigator. I used Spyder2.3.8 but the latest version should be fine
