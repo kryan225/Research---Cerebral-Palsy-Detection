@@ -12,7 +12,7 @@ Install Anaconda [For Windows](https://docs.anaconda.com/anaconda/install/window
 
 1. Open an ancaconda prompt
 		
-2. Type `conda create -n yourenvironmentname python=2.7 anaconda`
+2. Type `conda create -n yourenvironmentname`
 		
 3. Activate your new env with `source activate yourenvironmentname`
 
