@@ -27,9 +27,9 @@ Install Anaconda [For Windows](https://docs.anaconda.com/anaconda/install/window
 
 2. Navigate to your environment that you are using, if it is seperate from the base environment
 
-3. Type 'conda install opencv'
+3. Type `conda install opencv`
 
-4. Type 'conda install pymysql'
+4. Type `conda install pymysql`
 
 
 ### Final Steps
