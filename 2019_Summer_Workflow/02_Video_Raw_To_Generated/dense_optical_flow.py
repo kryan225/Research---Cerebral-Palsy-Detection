@@ -133,8 +133,8 @@ def sql_write(outFolder, name):
     Saves to local directory
     '''
     conn = connect()
-    #djp3 editted below
-    df = pd.read_sql('Select id, timestamp, RGB_frame from Video_Raw order by timestamp limit 10', con=conn)
+    #djp3 edit, adjust the query below to identify the elements you care about
+    df = pd.read_sql('Select id, recording_id, timestamp, RGB_frame from Video_Raw where recording_id=2 order by timestamp limit 10', con=conn)
     rawIds = pd.read_sql('Select raw_id from Video_Generated', con=conn)
     rawIds = rawIds['raw_id'].unique()
     written = []
@@ -152,6 +152,7 @@ def sql_write(outFolder, name):
         current = str(written[x]) + '.png'
         next = str(written[x + 1]) + '.png'
         nm = str(written[x + 1])# + '-' + str(df['id'][x + 1]) + '_OF'
+        print("Working on",written[x])
         frameCapture(current, next, outFolder, nm)
         if os.path.exists(current):
             os.remove(current)
