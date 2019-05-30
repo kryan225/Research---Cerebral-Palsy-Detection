@@ -265,7 +265,10 @@ def main():
         #identify the targets
         recording_ids = range(2,14)
 
-        (min, max) = find_min_max(conn,recording_ids,"cache/")
+        #(min, max) = find_min_max(conn,recording_ids,"cache/")
+
+        #This is from recording_ids = range(2,14) on 5/24
+        (min, max) = (568,1023)
 
         print("")
         print("The pre-scaled min is",min," and max is",max)
