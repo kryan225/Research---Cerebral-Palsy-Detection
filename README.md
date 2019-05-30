@@ -44,12 +44,16 @@ Things to give Prof. Patterson
 
 * Database access:
 	* Done. Database is on AWS under Patterson's root credentials
-* Ability to convert raw accelerometer in the database to generated in the db Python script that runs outside of AWS to capture the raw accelerometer data and put the generated data into AWS.
-	* Done. The python script is in `2019_Summer_Workflow/01_Accelerometer_Raw_To_Generated/feature_extraction.ipynb`
-* Ability to convert raw rgb frames in the database to optical flow images in the db.  A Python script that runs outside of AWS to capture the raw accelerometer data and put the generated data into AWS.
-	* Done. The python script is in `2019_Summer_Workflow/02_Video_Raw_To_Generated/dense_optical_flow.py`
-* Ability to convert depth frames in the database into depth-flow images
-	* Not done.  First task for summer students
+* Accelerometer
+	* Ability to convert raw accelerometer in the database to generated in the db Python script that runs outside of AWS to capture the raw accelerometer data and put the generated data into AWS.
+		* Done. The python script is in `2019_Summer_Workflow/01_Accelerometer_Raw_To_Generated/feature_extraction.ipynb`
+	* Ability to train an XGBoost model on accelerometer generated data and test it 
+		* Done.  The jupyter notebook is in SageMaker called nested_kfold_xgb_from_db.ipynb: https://xl.notebook.us-east-1.sagemaker.aws/notebooks/nested_kfold_xgb_from_db.ipynb
+* Video	
+	* Ability to convert raw rgb frames in the database to optical flow images in the db.  A Python script that runs outside of AWS to capture the raw accelerometer data and put the generated data into AWS.
+		* Done. The python script is in `2019_Summer_Workflow/02_Video_Raw_To_Generated/dense_optical_flow.py`
+	* Ability to convert depth frames in the database into depth-flow images
+		* Not done.  First task for summer students
 
 
 		
