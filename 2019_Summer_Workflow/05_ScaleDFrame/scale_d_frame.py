@@ -2,7 +2,8 @@
 """
 The goal here is to go through a collection of D_frames find the max and min
 values and then rescale the same D_frames by the max and min and store it in the
-D_Scaled field.  There are a few things that are happening that reduce repeated
+D_Scaled field. This is preparation for creating standard deviation images for
+machine learning.  There are a few things that are happening that reduce repeated
 computation.
 
 In main you specify the complete set of recording_ids that you are scaling
@@ -22,7 +23,8 @@ Then the code goes through the cache directory and uploads any files that have
 Clear the D_Scaled_Updated field with a query like:
 
     UPDATE Video_Raw JOIN Video_Generated ON Video_Raw.id = Video_Generated.raw_id SET Video_Generated.D_Scaled_Updated = NULL WHERE Video_Raw.recording_id >= 2;
-@author djp3
+
+@author: djp3,nyoung
 """
 #Secrets shouldn't be in the repository
 from secrets import credentials
@@ -53,10 +55,12 @@ def connect():
     conn = pymysql.connect(db_host, user=db_username, port=db_port, passwd=db_password, db=db_name)
     return conn
 
-
 #Find the min and max values in a selection of images indicated by a collection of recording_ids
 #Store images in the cache_directory
-def find_min_max(conn,recording_ids,cache_path):
+def find_min_max(conn, recording_ids, cache_path):
+    if not os.path.exists(cache_path):
+        os.mkdir(cache_path)
+        
     cursor = conn.cursor()
     my_max = -sys.maxsize-1
     my_min = sys.maxsize
@@ -175,7 +179,7 @@ def store_scaled_images(conn,cache_path):
 
     #Get all the ids that are currently present in the db with no update time
     null_update_ids = []
-    check_query = "SELECT raw_id, D_Scaled_Updated FROM Video_Generated WHERE D_Scaled_Updated IS NULL order by raw_id"
+    check_query = "SELECT raw_id FROM Video_Generated WHERE D_Scaled_Updated IS NULL order by raw_id"
     try:
         cursor.execute(check_query)
         for x in cursor.fetchall(): 
@@ -242,7 +246,7 @@ def store_scaled_images(conn,cache_path):
                         conn.rollback()
                         raise e
 
-
+                #update the database with the scaled frame and the current time
                 update_query = "UPDATE Video_Generated SET D_Scaled = %s, D_Scaled_Updated = NOW() WHERE (raw_id = %s)"
                 try:
                     with open(file_name, 'rb') as temp_f:
@@ -257,7 +261,7 @@ def store_scaled_images(conn,cache_path):
             else:
                 print("~",end="",flush=True)
 
-            
+
 def main():
     #open connection to database
     conn = connect()
@@ -283,4 +287,3 @@ def main():
 
 
 main()
-                    
