@@ -50,7 +50,7 @@ import pymysql
 from os import listdir
 from os.path import isfile, join
 
-        
+
 #Forms a connection to the database server using login credentials stored in credentials
 def connect():
     db_host = credentials['db_host'];
@@ -121,188 +121,197 @@ def process_rgb_frames(conn, recording_ids, cache_path):
     cursor = conn.cursor()
     print("Collecting images for processing (~ = solution already cached, Σ = solution calculated, ⇣ = source image fetched from db, m = multiple source images in db, x = source image not in db)")
 
-    for r_id in recording_ids:
+    try:
+        for r_id in recording_ids:
 
-        #Get relevant timestamps
-        print("")
-        print("Analyzing recording_id:",r_id,": ",end="")
-        all_time_stamps = []
-        firstTimeQuery='SELECT timestamp FROM Video_Raw WHERE (recording_id = %s) GROUP BY timestamp ORDER BY timestamp ASC'
-        try:
-            cursor.execute(firstTimeQuery,(r_id))
-            for row in cursor.fetchall():
-                all_time_stamps.append(row[0])
-        except Exception as e:
-            print("Failure retrieving first timestamp",e)
-            conn.rollback()
-            raise e
-
-        #Walk through each recording and calculate from a window of data
-        startTime = all_time_stamps.pop(0)
-
-        #Continue until we run out of data
-        capture=True
-
-        #Create a bias that will attempt to smooth optical flows
-        base_flow=None
-
-        #Create a reusable query
-        timeWindowQuery = 'SELECT id, timestamp FROM Video_Raw WHERE (recording_id = %s) AND (timestamp BETWEEN %s AND date_add(%s, INTERVAL 1 SECOND)) ORDER BY timestamp LIMIT 2'          
-        while (capture):
+            #Get relevant timestamps
+            print("")
+            print("Analyzing recording_id:",r_id,": ",end="")
+            all_time_stamps = []
+            firstTimeQuery='SELECT timestamp FROM Video_Raw WHERE (recording_id = %s) GROUP BY timestamp ORDER BY timestamp ASC'
             try:
-                cursor.execute(timeWindowQuery,(r_id, startTime, startTime))
-                results=cursor.fetchall()
-                #If there are at least 2 images in the time window then process
-                if (len(results) > 1):
-                    currentOutput=cache_path+str(results[1][0])+'.oflow.png'
-                    #print("Working on",currentOutput)
-                    #if the output already exists in the cache, skip this one and set a new start time 
-                    if not os.path.exists(currentOutput):  
-                        #print("\tDoes not exist")
-                        names=[]
-                        timestamps=[]
-                        
-                        #collect the id and timestamps from the query data
-                        for row in results: 
-                            #Figure out the name and timestamp for the source image
-                            raw_id = row[0]
-                            currentInput=cache_path+str(raw_id)+'.rgb.png'
-                            names.append(currentInput)
-                            timestamps.append(row[1])
-                            
-                            #if the rgb image is not in the cache, download it
-                            if not os.path.exists(currentInput):    
-                                #print("\t\tSource image does not exist",currentInput)
-                                #get the image from the database
-                                cursor2 = conn.cursor()
-                                rawQuery = 'SELECT RGB_frame FROM Video_Raw WHERE (id=%s)'
-                                cursor2.execute(rawQuery, (raw_id))
-                                #print("\t\t\tThere are",cursor.rowcount,"images")
-                                if cursor.rowcount == 0:
-                                    #There is no source image
-                                    print("x",end="",flush=True)
-                                else:
-                                    #There are multiple source images - problem, keep the last one
-                                    if cursor.rowcount > 1:
-                                        print("m",end="",flush=True)
-                                    for row2 in cursor2.fetchall():
-                                        db_img = row2[0]
-                                        if db_img is not None:
-                                            img=cv.imdecode(np.asarray(bytearray(db_img),dtype=np.uint8),cv.IMREAD_ANYDEPTH)
-                                            #Save the image
-                                            cv.imwrite(currentInput,img)
-                                            print("⇣",end="",flush=True)
-                                            #print("\t\t\t\tJust wrote",currentInput)
-                                        else:
-                                            print("\t\t\t\tCouldn't cache",currentInput)
-                                            #print("x",end="",flush=True)
-                            #else:
-                                #print("\t\tSource image exists",currentInput)
-                        #Given a list of names calculate the result
-                        base_flow = optical_flow_calculate(names,currentOutput,cache_path,base_flow)
-                        print("Σ",end="",flush=True)
-                    else:
-                        print("~",end="",flush=True)
-                else:
-                    base_flow=None
-
-                #If there is more data to process move to the next time stamp
-                if len(all_time_stamps) > 0:
-                    startTime = all_time_stamps.pop(0)
-                else:
-                    capture=False
+                cursor.execute(firstTimeQuery,(r_id))
+                for row in cursor.fetchall():
+                    all_time_stamps.append(row[0])
             except Exception as e:
-                print("Something failed",e)
+                print("Failure retrieving first timestamp",e)
+                conn.rollback()
                 raise e
+
+            #Walk through each recording and calculate from a window of data
+            startTime = all_time_stamps.pop(0)
+
+            #Continue until we run out of data
+            capture=True
+
+            #Create a bias that will attempt to smooth optical flows
+            base_flow=None
+
+            #Create a reusable query
+            timeWindowQuery = 'SELECT id, timestamp FROM Video_Raw WHERE (recording_id = %s) AND (timestamp BETWEEN %s AND date_add(%s, INTERVAL 1 SECOND)) ORDER BY timestamp LIMIT 2'          
+            while (capture):
+                try:
+                    cursor.execute(timeWindowQuery,(r_id, startTime, startTime))
+                    results=cursor.fetchall()
+                    #If there are at least 2 images in the time window then process
+                    if (len(results) > 1):
+                        currentOutput=cache_path+str(results[1][0])+'.oflow.png'
+                        #print("Working on",currentOutput)
+                        #if the output already exists in the cache, skip this one and set a new start time 
+                        if not os.path.exists(currentOutput):  
+                            #print("\tDoes not exist")
+                            names=[]
+                            timestamps=[]
+                        
+                            #collect the id and timestamps from the query data
+                            for row in results: 
+                                #Figure out the name and timestamp for the source image
+                                raw_id = row[0]
+                                currentInput=cache_path+str(raw_id)+'.rgb.png'
+                                names.append(currentInput)
+                                timestamps.append(row[1])
+                            
+                                #if the rgb image is not in the cache, download it
+                                if not os.path.exists(currentInput):    
+                                    #print("\t\tSource image does not exist",currentInput)
+                                    #get the image from the database
+                                    cursor2 = conn.cursor()
+                                    try:
+                                        rawQuery = 'SELECT RGB_frame FROM Video_Raw WHERE (id=%s)'
+                                        cursor2.execute(rawQuery, (raw_id))
+                                        #print("\t\t\tThere are",cursor.rowcount,"images")
+                                        if cursor.rowcount == 0:
+                                            #There is no source image
+                                            print("x",end="",flush=True)
+                                        else:
+                                            #There are multiple source images - problem, keep the last one
+                                            if cursor.rowcount > 1:
+                                                print("m",end="",flush=True)
+                                            for row2 in cursor2.fetchall():
+                                                db_img = row2[0]
+                                                if db_img is not None:
+                                                    img=cv.imdecode(np.asarray(bytearray(db_img),dtype=np.uint8),cv.IMREAD_ANYDEPTH)
+                                                    #Save the image
+                                                    cv.imwrite(currentInput,img)
+                                                    print("⇣",end="",flush=True)
+                                                    #print("\t\t\t\tJust wrote",currentInput)
+                                                else:
+                                                    print("\t\t\t\tCouldn't cache",currentInput)
+                                                    #print("x",end="",flush=True)
+                                    finally:
+                                        cursor2.close();
+                                #else:
+                                    #print("\t\tSource image exists",currentInput)
+                            #Given a list of names calculate the result
+                            base_flow = optical_flow_calculate(names,currentOutput,cache_path,base_flow)
+                            print("Σ",end="",flush=True)
+                        else:
+                            print("~",end="",flush=True)
+                    else:
+                        base_flow=None
+
+                    #If there is more data to process move to the next time stamp
+                    if len(all_time_stamps) > 0:
+                        startTime = all_time_stamps.pop(0)
+                    else:
+                        capture=False
+                except Exception as e:
+                    print("Something failed",e)
+                    raise e
+    finally:
+        cursor.close()
     print("")
 
 #Upload any processed images stored in the cache directory to the database
 def upload_processed_images(conn,cache_path):
-    cursor = conn.cursor()    
-    print("Storing the optical flow images (# = deleting multiple db entries, o = placeholder created in db, ⇡ = uploaded to db , ~ = db not updated b/c image already present with date)")
-    print("")
-    
-    #Get all the ids that are currently present in the db with no update time
-    null_update_ids = []
-    check_query = "SELECT raw_id FROM Video_Generated WHERE RGB_Optical_Flow_Updated IS NULL order by raw_id"
+    cursor = conn.cursor()
     try:
-        cursor.execute(check_query)
-        for x in cursor.fetchall(): 
-            null_update_ids.append(x[0])
-    except Exception as e:
-        print("Unable to select ids from Video_Generated with null update time",e)
-        conn.rollback()
-        raise e
+        print("Storing the optical flow images (# = deleting multiple db entries, o = placeholder created in db, ⇡ = uploaded to db , ~ = db not updated b/c image already present with date)")
+        print("")
 
-    #Get all the ids that are currently present in the db with an update time
-    not_null_update_ids = []
-    check_query = "SELECT raw_id, RGB_Optical_Flow_Updated FROM Video_Generated WHERE RGB_Optical_Flow_Updated IS NOT NULL order by raw_id"
-    try:
-        cursor.execute(check_query)
-        for x in cursor.fetchall(): 
-            not_null_update_ids.append(x[0])
-    except Exception as e:
-        print("Unable to select ids from Video_Generated with not null update time",e)
-        conn.rollback()
-        raise e
+        #Get all the ids that are currently present in the db with no update time
+        null_update_ids = []
+        check_query = "SELECT raw_id FROM Video_Generated WHERE RGB_Optical_Flow_Updated IS NULL order by raw_id"
+        try:
+            cursor.execute(check_query)
+            for x in cursor.fetchall(): 
+                null_update_ids.append(x[0])
+        except Exception as e:
+            print("Unable to select ids from Video_Generated with null update time",e)
+            conn.rollback()
+            raise e
 
-    #Try and insert all the images from the cache that are of the pattern "*oflow.png"
-    for f in sorted(os.listdir(cache_path)):
-        if "oflow" in f:
-            currentID = int(f[:-10])
-            file_name = cache_path + f
-            #print("Storing:",currentID,"filename:",file_name)
+        #Get all the ids that are currently present in the db with an update time
+        not_null_update_ids = []
+        check_query = "SELECT raw_id, RGB_Optical_Flow_Updated FROM Video_Generated WHERE RGB_Optical_Flow_Updated IS NOT NULL order by raw_id"
+        try:
+            cursor.execute(check_query)
+            for x in cursor.fetchall(): 
+                not_null_update_ids.append(x[0])
+        except Exception as e:
+            print("Unable to select ids from Video_Generated with not null update time",e)
+            conn.rollback()
+            raise e
 
-            null_present = null_update_ids.count(currentID)
-            not_null_present = not_null_update_ids.count(currentID)
-            present = null_present + not_null_present
+        #Try and insert all the images from the cache that are of the pattern "*oflow.png"
+        for f in sorted(os.listdir(cache_path)):
+            if "oflow" in f:
+                currentID = int(f[:-10])
+                file_name = cache_path + f
+                #print("Storing:",currentID,"filename:",file_name)
 
-            #If there are multiple entries then remove them all
-            if present > 1:
-                delete_query = "DELETE FROM Video_Generated WHERE (raw_id = %s)"
-                try:
-                    cursor.execute(delete_query,(currentID))
-                    conn.commit()
-                    print(present,end="",flush=True)
-                    null_present = 0
-                    not_null_present = 0
-                    present = null_present + not_null_present
-                except Exception as e:
-                    print("Unable to delete multiple ids from Video_Generated",delete_query,e)
-                    conn.rollback()
-                    raise e
+                null_present = null_update_ids.count(currentID)
+                not_null_present = not_null_update_ids.count(currentID)
+                present = null_present + not_null_present
 
-            #Check to see if there is already an image in the database with a timestamp
-            if not_null_present == 0:
-                #Make sure there is an entry to put the photo in
-                if present == 0:
-                    insert_query = "INSERT INTO Video_Generated (raw_id) VALUES (%s)"
+                #If there are multiple entries then remove them all
+                if present > 1:
+                    delete_query = "DELETE FROM Video_Generated WHERE (raw_id = %s)"
                     try:
-                        #insert the raw_id
-                        cursor.execute(insert_query, (currentID))
+                        cursor.execute(delete_query,(currentID))
                         conn.commit()
-                        null_present = 1
+                        print(present,end="",flush=True)
+                        null_present = 0
+                        not_null_present = 0
                         present = null_present + not_null_present
-                        print("o",end="",flush=True)
                     except Exception as e:
-                        print("Unable to make an entry for:",insert_query,file_name)
+                        print("Unable to delete multiple ids from Video_Generated",delete_query,e)
                         conn.rollback()
                         raise e
 
-                #update the database with the processed frame and the current time
-                update_query = "UPDATE Video_Generated SET RGB_Optical_Flow = %s, RGB_Optical_Flow_Updated = NOW() WHERE (raw_id = %s)"
-                try:
-                    with open(file_name, 'rb') as temp_f:
-                        photo = temp_f.read()
-                    cursor.execute(update_query, (photo, currentID))
-                    conn.commit()
-                    print("⇡",end="",flush=True)
-                except Exception as e:
-                    print("Unable to store scaled photo in the db",file_name)
-                    conn.rollback() 
-                    raise e
-            else:
-                print("~",end="",flush=True)
+                #Check to see if there is already an image in the database with a timestamp
+                if not_null_present == 0:
+                    #Make sure there is an entry to put the photo in
+                    if present == 0:
+                        insert_query = "INSERT INTO Video_Generated (raw_id) VALUES (%s)"
+                        try:
+                            #insert the raw_id
+                            cursor.execute(insert_query, (currentID))
+                            conn.commit()
+                            null_present = 1
+                            present = null_present + not_null_present
+                            print("o",end="",flush=True)
+                        except Exception as e:
+                            print("Unable to make an entry for:",insert_query,file_name)
+                            conn.rollback()
+                            raise e
+
+                    #update the database with the processed frame and the current time
+                    update_query = "UPDATE Video_Generated SET RGB_Optical_Flow = %s, RGB_Optical_Flow_Updated = NOW() WHERE (raw_id = %s)"
+                    try:
+                        with open(file_name, 'rb') as temp_f:
+                            photo = temp_f.read()
+                        cursor.execute(update_query, (photo, currentID))
+                        conn.commit()
+                        print("⇡",end="",flush=True)
+                    except Exception as e:
+                        print("Unable to store scaled photo in the db",file_name)
+                        conn.rollback() 
+                        raise e
+                else:
+                    print("~",end="",flush=True)
+    finally:
+        cursor.close()
     print("")
 
 
@@ -313,19 +322,21 @@ def main():
     #open connection to database
     conn = connect()
     try:
-        #identify the targets
-        recording_ids = range(0,14)
+        if conn.is_connected():
+            #identify the targets
+            recording_ids = range(0,14)
 
-        #download source images and cache processed images
-        process_rgb_frames(conn,recording_ids,"cache/")
+            #download source images and cache processed images
+            process_rgb_frames(conn,recording_ids,"cache/")
 
-        #Upload any processed images as appropriate
-        upload_processed_images(conn,"cache/")
+            #Upload any processed images as appropriate
+            upload_processed_images(conn,"cache/")
+        else:
+            print("\t...connection failed")
     finally:
         conn.close()
 
     print("Don't forget to erase the cache files!");
 
-
-
-main()
+if __name__ == '__main__':
+    main()
