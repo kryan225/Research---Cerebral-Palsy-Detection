@@ -21,6 +21,7 @@ is not recalculated or replaced. So make sure those are good.
 Then the code goes through the cache directory and uploads any files that have
 "dflow" in the name.  It does not update any entries in the database unless the
 "D_Depth_Flow_Updated" field is NULL.
+
 Clear the D_Depth_Flow_Updated field with a query like:
 
     UPDATE Video_Raw JOIN Video_Generated ON Video_Raw.id = Video_Generated.raw_id SET Video_Generated.D_Depth_Flow_Updated = NULL WHERE Video_Raw.recording_id >= 2;
@@ -57,6 +58,13 @@ def connect():
 #Takes in a list of frames and writes depth flow image to the local
 #directory cache_path
 def depth_frame_calculate(images,currentOutput,cache_path):
+
+    if len(images) < 3:
+        raise Exception("Not enough files to calculate density flow from: {}".format(images))
+
+    if not os.path.exists(cache_path):
+        os.mkdir(cache_path)
+
     #get all the frames into a list
     frameList=[]
     for image in images:
@@ -93,7 +101,7 @@ def process_d_frames(conn, recording_ids, cache_path):
         print("")
         print("Analyzing recording_id:",r_id,": ",end="")
         all_time_stamps = []
-        firstTimeQuery='SELECT timestamp FROM Video_Raw WHERE (recording_id = %s) GROUP BY timestamp ORDER BY timestamp ASC '
+        firstTimeQuery='SELECT timestamp FROM Video_Raw WHERE (recording_id = %s) GROUP BY timestamp ORDER BY timestamp ASC'
         try:
             cursor.execute(firstTimeQuery,(r_id))
             for row in cursor.fetchall():
@@ -138,8 +146,8 @@ def process_d_frames(conn, recording_ids, cache_path):
                                 #print("\t\tSource image does not exist",currentInput)
                                 #get the image from the database
                                 cursor2 = conn.cursor()
-                                depthQuery = 'SELECT D_Scaled FROM Video_Generated WHERE (raw_id=%s)'
-                                cursor2.execute(depthQuery, (raw_id))
+                                scaledQuery = 'SELECT D_Scaled FROM Video_Generated WHERE (raw_id=%s)'
+                                cursor2.execute(scaledQuery, (raw_id))
                                 #print("\t\t\tThere are",cursor.rowcount,"images")
                                 if cursor.rowcount == 0:
                                     #There is no source image
@@ -157,7 +165,7 @@ def process_d_frames(conn, recording_ids, cache_path):
                                             print("\t\t\t\tCouldn't cache",currentInput)
                                             #print("x",end="",flush=True)
                             #else:
-                                #print("\t\tSource image does exist",currentInput)
+                                #print("\t\tSource image exists",currentInput)
                         #Given a list of names calculate the result
                         depth_frame_calculate(names,currentOutput,cache_path)
                         print("Σ",end="",flush=True)
