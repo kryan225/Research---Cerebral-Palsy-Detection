@@ -322,17 +322,14 @@ def main():
     #open connection to database
     conn = connect()
     try:
-        if conn.is_connected():
-            #identify the targets
-            recording_ids = range(0,14)
+        #identify the targets
+        recording_ids = range(0,14)
 
-            #download source images and cache processed images
-            process_rgb_frames(conn,recording_ids,"cache/")
+        #download source images and cache processed images
+        process_rgb_frames(conn,recording_ids,"cache/")
 
-            #Upload any processed images as appropriate
-            upload_processed_images(conn,"cache/")
-        else:
-            print("\t...connection failed")
+        #Upload any processed images as appropriate
+        upload_processed_images(conn,"cache/")
     finally:
         conn.close()
 
