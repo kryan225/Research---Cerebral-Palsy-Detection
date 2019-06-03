@@ -63,19 +63,16 @@ def connect():
 
 #Takes in a list of two frames and writes optical flow image to the local
 #directory cache_path
-def optical_flow_calculate(in_files, out_file, cache_path, base_flow):
+def optical_flow_calculate(in_files, out_file, base_flow):
 
     if len(in_files) < 2:
         raise Exception("Not enough files to calculate optical flow from: {}".format(in_files))
 
-    if not os.path.exists(cache_path):
-        os.mkdir(cache_path)
-
     #get the frames 
     frame1 = cv.imread(in_files[0])
-    previous_frame = cv.cvtColor(frame1,cv.COLOR_BGR2GRAY)
+    previous_frame = cv.cvtColor(frame1,cv.COLOR_RGB2GRAY)
     frame2 = cv.imread(in_files[1])
-    next_frame = cv.cvtColor(frame2,cv.COLOR_BGR2GRAY)
+    next_frame = cv.cvtColor(frame2,cv.COLOR_RGB2GRAY)
 
 
     hsv = np.zeros_like(frame1)
@@ -84,27 +81,26 @@ def optical_flow_calculate(in_files, out_file, cache_path, base_flow):
     #documentation: https://docs.opencv.org/2.4/modules/video/doc/motion_analysis_and_object_tracking.html
     pyr_scale = 0.5
     levels = 3
-    winsize = 8
+    winsize = 10
     iterations = 3
     poly_n = 7
     poly_sigma = 1.5
-    flags = cv.OPTFLOW_USE_INITIAL_FLOW | cv.OPTFLOW_FARNEBACK_GAUSSIAN
 
     if base_flow is None:
-        base_flow = cv.calcOpticalFlowFarneback(prev=previous_frame,next=next_frame, pyr_scale=pyr_scale, levels=levels, winsize=winsize, iterations=iterations, poly_n=poly_n, poly_sigma=poly_sigma, flags=flags)
+        flags = cv.OPTFLOW_FARNEBACK_GAUSSIAN
+        base_flow = cv.calcOpticalFlowFarneback(previous_frame,next_frame,None,pyr_scale = pyr_scale, levels = levels, winsize =winsize, iterations =iterations, poly_n=poly_n, poly_sigma=poly_sigma, flags=flags)
         flow = base_flow
     else:
-        flow = cv.calcOpticalFlowFarneback(prev=previous_frame,next=next_frame,flow=base_flow, pyr_scale=pyr_scale, levels=levels, winsize=winsize, iterations=iterations, poly_n=poly_n, poly_sigma=poly_sigma, flags=flags)
+        flags = cv.OPTFLOW_USE_INITIAL_FLOW + cv.OPTFLOW_FARNEBACK_GAUSSIAN
+        flow = cv.calcOpticalFlowFarneback(previous_frame,next_frame,base_flow, pyr_scale=pyr_scale, levels=levels, winsize=winsize, iterations=iterations, poly_n=poly_n, poly_sigma=poly_sigma, flags=flags)
         base_flow = flow
     
     mag, ang = cv.cartToPolar(flow[...,0], flow[...,1])
     hsv[...,0] = ang*180/np.pi/2
     hsv[...,2] = cv.normalize(mag,None,0,255,cv.NORM_MINMAX)
-    bgr = cv.cvtColor(hsv,cv.COLOR_HSV2BGR)
-    cv.imshow('frame2',bgr)
+    rgb = cv.cvtColor(hsv,cv.COLOR_HSV2RGB)
 
-    cv.imwrite(cache_path+out_file,bgr)
-    cv.destroyAllWindows()
+    cv.imwrite(out_file,rgb)
     return base_flow
 
 
@@ -138,86 +134,87 @@ def process_rgb_frames(conn, recording_ids, cache_path):
                 conn.rollback()
                 raise e
 
-            #Walk through each recording and calculate from a window of data
-            startTime = all_time_stamps.pop(0)
+            if len(all_time_stamps) > 0:
+                #Walk through each recording and calculate from a window of data
+                startTime = all_time_stamps.pop(0)
 
-            #Continue until we run out of data
-            capture=True
+                #Continue until we run out of data
+                capture=True
 
-            #Create a bias that will attempt to smooth optical flows
-            base_flow=None
+                #Create a bias that will attempt to smooth optical flows
+                base_flow=None
 
-            #Create a reusable query
-            timeWindowQuery = 'SELECT id, timestamp FROM Video_Raw WHERE (recording_id = %s) AND (timestamp BETWEEN %s AND date_add(%s, INTERVAL 1 SECOND)) ORDER BY timestamp LIMIT 2'          
-            while (capture):
-                try:
-                    cursor.execute(timeWindowQuery,(r_id, startTime, startTime))
-                    results=cursor.fetchall()
-                    #If there are at least 2 images in the time window then process
-                    if (len(results) > 1):
-                        currentOutput=cache_path+str(results[1][0])+'.oflow.png'
-                        #print("Working on",currentOutput)
-                        #if the output already exists in the cache, skip this one and set a new start time 
-                        if not os.path.exists(currentOutput):  
-                            #print("\tDoes not exist")
-                            names=[]
-                            timestamps=[]
+                #Create a reusable query
+                timeWindowQuery = 'SELECT id, timestamp FROM Video_Raw WHERE (recording_id = %s) AND (timestamp BETWEEN %s AND date_add(%s, INTERVAL 1 SECOND)) ORDER BY timestamp LIMIT 2'          
+                while (capture):
+                    try:
+                        cursor.execute(timeWindowQuery,(r_id, startTime, startTime))
+                        results=cursor.fetchall()
+                        #If there are at least 2 images in the time window then process
+                        if (len(results) > 1):
+                            currentOutput=cache_path+str(results[1][0])+'.oflow.png'
+                            #print("Working on",currentOutput)
+                            #if the output already exists in the cache, skip this one and set a new start time 
+                            if not os.path.exists(currentOutput):  
+                                #print("\tDoes not exist")
+                                names=[]
+                                timestamps=[]
                         
-                            #collect the id and timestamps from the query data
-                            for row in results: 
-                                #Figure out the name and timestamp for the source image
-                                raw_id = row[0]
-                                currentInput=cache_path+str(raw_id)+'.rgb.png'
-                                names.append(currentInput)
-                                timestamps.append(row[1])
+                                #collect the id and timestamps from the query data
+                                for row in results: 
+                                    #Figure out the name and timestamp for the source image
+                                    raw_id = row[0]
+                                    currentInput=cache_path+str(raw_id)+'.rgb.png'
+                                    names.append(currentInput)
+                                    timestamps.append(row[1])
                             
-                                #if the rgb image is not in the cache, download it
-                                if not os.path.exists(currentInput):    
-                                    #print("\t\tSource image does not exist",currentInput)
-                                    #get the image from the database
-                                    cursor2 = conn.cursor()
-                                    try:
-                                        rawQuery = 'SELECT RGB_frame FROM Video_Raw WHERE (id=%s)'
-                                        cursor2.execute(rawQuery, (raw_id))
-                                        #print("\t\t\tThere are",cursor.rowcount,"images")
-                                        if cursor.rowcount == 0:
-                                            #There is no source image
-                                            print("x",end="",flush=True)
-                                        else:
-                                            #There are multiple source images - problem, keep the last one
-                                            if cursor.rowcount > 1:
-                                                print("m",end="",flush=True)
-                                            for row2 in cursor2.fetchall():
-                                                db_img = row2[0]
-                                                if db_img is not None:
-                                                    img=cv.imdecode(np.asarray(bytearray(db_img),dtype=np.uint8),cv.IMREAD_ANYDEPTH)
-                                                    #Save the image
-                                                    cv.imwrite(currentInput,img)
-                                                    print("⇣",end="",flush=True)
-                                                    #print("\t\t\t\tJust wrote",currentInput)
-                                                else:
-                                                    print("\t\t\t\tCouldn't cache",currentInput)
-                                                    #print("x",end="",flush=True)
-                                    finally:
-                                        cursor2.close();
-                                #else:
-                                    #print("\t\tSource image exists",currentInput)
-                            #Given a list of names calculate the result
-                            base_flow = optical_flow_calculate(names,currentOutput,cache_path,base_flow)
-                            print("Σ",end="",flush=True)
+                                    #if the rgb image is not in the cache, download it
+                                    if not os.path.exists(currentInput):    
+                                        #print("\t\tSource image does not exist",currentInput)
+                                        #get the image from the database
+                                        cursor2 = conn.cursor()
+                                        try:
+                                            rawQuery = 'SELECT RGB_frame FROM Video_Raw WHERE (id=%s)'
+                                            cursor2.execute(rawQuery, (raw_id))
+                                            #print("\t\t\tThere are",cursor.rowcount,"images")
+                                            if cursor.rowcount == 0:
+                                                #There is no source image
+                                                print("x",end="",flush=True)
+                                            else:
+                                                #There are multiple source images - problem, keep the last one
+                                                if cursor2.rowcount > 1:
+                                                    print("m",end="",flush=True)
+                                                for row2 in cursor2.fetchall():
+                                                    db_img = row2[0]
+                                                    if db_img is not None:
+                                                        img=cv.imdecode(np.asarray(bytearray(db_img),dtype=np.uint8),cv.IMREAD_UNCHANGED)
+                                                        #Save the image
+                                                        cv.imwrite(currentInput,img)
+                                                        print("⇣",end="",flush=True)
+                                                        #print("\t\t\t\tJust wrote",currentInput)
+                                                    else:
+                                                        print("\t\t\t\tCouldn't cache",currentInput)
+                                                        #print("x",end="",flush=True)
+                                        finally:
+                                            cursor2.close();
+                                    #else:
+                                        #print("\t\tSource image exists",currentInput)
+                                #Given a list of names calculate the result
+                                base_flow = optical_flow_calculate(names,currentOutput,base_flow)
+                                print("Σ",end="",flush=True)
+                            else:
+                                print("~",end="",flush=True)
                         else:
-                            print("~",end="",flush=True)
-                    else:
-                        base_flow=None
+                            base_flow=None
 
-                    #If there is more data to process move to the next time stamp
-                    if len(all_time_stamps) > 0:
-                        startTime = all_time_stamps.pop(0)
-                    else:
-                        capture=False
-                except Exception as e:
-                    print("Something failed",e)
-                    raise e
+                        #If there is more data to process move to the next time stamp
+                        if len(all_time_stamps) > 0:
+                            startTime = all_time_stamps.pop(0)
+                        else:
+                            capture=False
+                    except Exception as e:
+                        print("Something failed",e)
+                        raise e
     finally:
         cursor.close()
     print("")
@@ -323,7 +320,7 @@ def main():
     conn = connect()
     try:
         #identify the targets
-        recording_ids = range(0,14)
+        recording_ids = range(0,3)
 
         #download source images and cache processed images
         process_rgb_frames(conn,recording_ids,"cache/")
