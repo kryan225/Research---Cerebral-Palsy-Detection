@@ -5,15 +5,16 @@ by the D in RGB-D cameras.
 The original images are taken from a database, stored locally, processed, stored
 locally, then put in the database.
 
-In main you specify the complete set of recording_ids that you are processing 
+In "main" one specifies the complete set of recording_ids that you are processing 
 over.  The code loops through all of those and calculates the depth flow images
-from them.  It looks in a local cache directory, 'cache' for the images
+from them.  It looks in a local cache directory, 'cache' for the source images
 before asking the database for them.  If it does need an image from the database
-it stores it in the cache. Make sure existing files in the cache are good or you
+it stores it in the local cache. Make sure existing files in the cache are good or you
 will be processing bad data.
 
 From those images we create an image in which each pixel is the standard
-deviation of the same pixel in images within a window of 1 second in time.
+deviation of the same pixel in images within a window of 1 second in time. The
+window extends 1 second backward in time from the reference image.
 A version of each processed image is also stored it in the cached
 directory in the format <raw_id>.dflow.png.  If the file already exists, then it
 is not recalculated or replaced. So make sure those are good.
@@ -73,15 +74,21 @@ def depth_frame_calculate(images,currentOutput,cache_path):
     #set the correct path for the depth frame and save the image to the local directory
     cv.imwrite(currentOutput,generated) 
     
+
+
 #Finds a selection of images indicated by a collection of recording_ids
 #Store images in the cache_directory
 def process_d_frames(conn, recording_ids, cache_path):
+
+    #Create the cache directory if it doesn't exist
     if not os.path.exists(cache_path):
         os.mkdir(cache_path)
         
     cursor = conn.cursor()
     print("Collecting images for processing (~ = solution already cached, Σ = solution calculated, ⇣ = source image fetched from db, x = source image not in db)")
+
     for r_id in recording_ids:
+
         #Get relevant timestamps
         print("")
         print("Analyzing recording_id:",r_id,": ",end="")
@@ -96,19 +103,23 @@ def process_d_frames(conn, recording_ids, cache_path):
             conn.rollback()
             raise e
 
+        #Walk through each recording and calculate from a window of data
         startTime = all_time_stamps.pop(0)
-        print(startTime)
-        raise Exception("Stop")
+
+        #Continue until we run out of data
         capture=True
+
+        #Create a reusable query
         timeWindowQuery = 'SELECT id, timestamp FROM Video_Raw WHERE (recording_id = %s) AND (timestamp BETWEEN date_sub(%s,INTERVAL 1 SECOND) AND %s) ORDER BY timestamp'          
         while (capture):
             try:
                 cursor.execute(timeWindowQuery,(r_id, startTime, startTime))
                 results=cursor.fetchall()
+                #If there are at least 3 images in the time window then process
                 if (len(results) > 2):
                     currentOutput=cache_path+str(results[len(results)-1][0])+'.dflow.png'
                     #print("Working on",currentOutput)
-                    #if the output already exists in the cache, set a new start time 
+                    #if the output already exists in the cache, skip this one and set a new start time 
                     if not os.path.exists(currentOutput):  
                         #print("\tDoes not exist")
                         names=[]
@@ -116,12 +127,13 @@ def process_d_frames(conn, recording_ids, cache_path):
                         
                         #collect the id and timestamps from the query data
                         for row in results: 
+                            #Figure out the name and timestamp for the source image
                             raw_id = row[0]
                             currentInput=cache_path+str(raw_id)+'.scale.png'
                             names.append(currentInput)
                             timestamps.append(row[1])
                             
-                            #if the scaled image is not in the cache, download it
+                            #if the source image is not in the cache, download it
                             if not os.path.exists(currentInput):    
                                 #print("\t\tSource image does not exist",currentInput)
                                 #get the image from the database
@@ -130,6 +142,7 @@ def process_d_frames(conn, recording_ids, cache_path):
                                 cursor2.execute(depthQuery, (raw_id))
                                 #print("\t\t\tThere are",cursor.rowcount,"images")
                                 if cursor.rowcount == 0:
+                                    #There is no source image
                                     print("x",end="",flush=True)
                                 else:
                                     for row2 in cursor2.fetchall():
@@ -141,15 +154,17 @@ def process_d_frames(conn, recording_ids, cache_path):
                                             print("⇣",end="",flush=True)
                                             #print("\t\t\t\tJust wrote",currentInput)
                                         else:
-                                            print("\t\t\t\tJust couldn't write",currentInput)
+                                            print("\t\t\t\tCouldn't cache",currentInput)
                                             #print("x",end="",flush=True)
                             #else:
                                 #print("\t\tSource image does exist",currentInput)
+                        #Given a list of names calculate the result
                         depth_frame_calculate(names,currentOutput,cache_path)
                         print("Σ",end="",flush=True)
                     else:
                         print("~",end="",flush=True)
 
+                #If there is more data to process move to the next time stamp
                 if len(all_time_stamps) > 0:
                     startTime = all_time_stamps.pop(0)
                 else:
@@ -160,7 +175,7 @@ def process_d_frames(conn, recording_ids, cache_path):
     print("")
 
 #Upload any processed images stored in the cache directory to the database
-def store_processed_images(conn,cache_path):
+def upload_processed_images(conn,cache_path):
     cursor = conn.cursor()    
     print("Storing the depth flow images (# = deleting multiple db entries, o = placeholder created in db, ⇡ = uploaded to db , ~ = db not updated b/c image already present with date)")
     print("")
@@ -250,16 +265,23 @@ def store_processed_images(conn,cache_path):
 
 
 def main():
+
+    print("Attempting to create Depth Flow Images")
+
     #open connection to database
     conn = connect()
     try:
         #identify the targets
         recording_ids = range(2,3)
 
+        #download source images and cache processed images
         process_d_frames(conn,recording_ids,"cache/")
-        store_processed_images(conn,"cache/")
+
+        #Upload any processed images as appropriate
+        upload_processed_images(conn,"cache/")
     finally:
         conn.close()
+
     print("Don't forget to erase the cache files!");
 
 
