@@ -320,7 +320,7 @@ def main():
     conn = connect()
     try:
         #identify the targets
-        recording_ids = range(0,3)
+        recording_ids = range(0,14)
 
         #download source images and cache processed images
         process_rgb_frames(conn,recording_ids,"cache/")
