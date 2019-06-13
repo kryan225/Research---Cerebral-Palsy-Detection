@@ -22,3 +22,4 @@ cache
 2019_Summer_Workflow/05_ScaleDFrame/__pycache__
 2019_Summer_Workflow/06_ProcessedDFrame/__pycache__
 2019_Summer_Workflow/__pycache__
+.DS_Store

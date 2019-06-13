@@ -74,7 +74,6 @@ def optical_flow_calculate(in_files, out_file, base_flow):
     frame2 = cv.imread(in_files[1])
     next_frame = cv.cvtColor(frame2,cv.COLOR_RGB2GRAY)
 
-
     hsv = np.zeros_like(frame1)
     hsv[...,1] = 255
     
@@ -87,11 +86,15 @@ def optical_flow_calculate(in_files, out_file, base_flow):
     poly_sigma = 1.5
 
     if base_flow is None:
-        flags = cv.OPTFLOW_FARNEBACK_GAUSSIAN
+        #Gaussian had some degenerate behavior on one of our babies
+        #flags = cv.OPTFLOW_FARNEBACK_GAUSSIAN
+        flags = 0
         base_flow = cv.calcOpticalFlowFarneback(previous_frame,next_frame,None,pyr_scale = pyr_scale, levels = levels, winsize =winsize, iterations =iterations, poly_n=poly_n, poly_sigma=poly_sigma, flags=flags)
         flow = base_flow
     else:
-        flags = cv.OPTFLOW_USE_INITIAL_FLOW + cv.OPTFLOW_FARNEBACK_GAUSSIAN
+        #Gaussian had some degenerate behavior on one of our babies
+        #flags = cv.OPTFLOW_USE_INITIAL_FLOW + cv.OPTFLOW_FARNEBACK_GAUSSIAN
+        flags = cv.OPTFLOW_USE_INITIAL_FLOW
         flow = cv.calcOpticalFlowFarneback(previous_frame,next_frame,base_flow, pyr_scale=pyr_scale, levels=levels, winsize=winsize, iterations=iterations, poly_n=poly_n, poly_sigma=poly_sigma, flags=flags)
         base_flow = flow
     
