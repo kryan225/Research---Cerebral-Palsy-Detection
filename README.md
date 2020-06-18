@@ -1,3 +1,5 @@
+# NOTE Work has changed to new Repository: https://github.com/djp3/Research---Cerebral-Palsy-Detection.git
+
 # Research---Cerebral-Palsy-Detection
 Using OpenCV, AWS ML, and AWS Sagemaker we attempt to predict signs of cerebral palsy in premature babies
 
